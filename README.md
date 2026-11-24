@@ -1,8 +1,7 @@
 # Mujica
 
-Automated cut-editing agent for voice-intensive content.
-
-Upload a video and describe a scene. Agents read the transcript and frames of each chunk, then return the matching parts as candidate clips.
+Automated cut-editing agent for voice-intensive content. <br />
+Agents transcribes audio from frame and uses information into context of agent. then return the matching parts as candidate clips.
 
 ## Requirements
 
