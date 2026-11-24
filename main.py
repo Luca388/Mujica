@@ -1,0 +1,65 @@
+"""
+Mujica 파이프라인. 영상과 요청 문장을 받아 요청한 장면을 찾고, 후보 클립으로 잘라 돌려준다.
+
+settings
+    ollama_url          Ollama 서버 주소
+    agent_model         서브에이전트 모델 (도구 호출 지원)
+    vision_model        프레임을 보고 답하는 모델 (이미지 입력 지원)
+    chunk_count         영상을 나눌 조각 수 = 서브에이전트 수
+    window_seconds      대표 프레임 한 장이 맡는 시간(초)
+    frames_per_look     에이전트가 한 번에 볼 수 있는 프레임 수
+    whisper_server_url  OpenAI 호환 받아쓰기 서버 주소
+    whisper_model       받아쓰기 서버의 모델 이름
+    language            받아쓰기 언어 코드
+
+report_progress(문장, 끝났는지) 는 진행 상황을 받는 비동기 함수다.
+"""
+
+import asyncio
+import tempfile
+
+from step1_probe_video import probe_video
+from step2_split_timeline import split_timeline
+from step3_extract_frames import extract_frames
+from step4_transcribe_audio import WhisperServer, transcribe_windows
+from step5_chunk_agent import create_ollama_model, run_chunk_agent
+from step6_merge_results import merge_segments
+from step7_cut_clips import cut_clips
+
+
+async def find_moments(user_request, video_path, settings, output_dir, report_progress):
+    chunk_count = settings["chunk_count"]
+
+    await report_progress("영상 정보를 읽는 중", False)
+    duration, has_audio = await asyncio.to_thread(probe_video, video_path)
+    chunks = split_timeline(duration, chunk_count, settings["window_seconds"])
+
+    whisper_server = WhisperServer(settings["whisper_server_url"], settings["whisper_model"], settings["language"])
+    agent_model = create_ollama_model(settings["agent_model"], settings["ollama_url"])
+    vision_model = create_ollama_model(settings["vision_model"], settings["ollama_url"])
+
+    with tempfile.TemporaryDirectory(prefix="mujica_") as work_dir:
+        # 조각을 하나 준비하는 대로 그 조각의 에이전트를 출발시켜서,
+        # 다음 조각을 준비하는 동안 앞 조각의 에이전트가 같이 일하게 한다.
+        agent_tasks = []
+        for chunk in chunks:
+            await report_progress(f"조각 {chunk.number}/{chunk_count} 프레임 추출 및 받아쓰기 중", False)
+            await asyncio.to_thread(extract_frames, video_path, chunk, work_dir)
+            if has_audio:
+                await asyncio.to_thread(transcribe_windows, video_path, chunk, work_dir, whisper_server)
+
+            agent_run = run_chunk_agent(
+                agent_model, vision_model, chunk, chunk_count, user_request, settings["frames_per_look"],
+            )
+            agent_tasks.append(asyncio.create_task(agent_run))
+
+        await report_progress(f"서브에이전트 {chunk_count}명이 구간을 찾는 중", False)
+        segments_per_chunk = await asyncio.gather(*agent_tasks)
+
+    segments = merge_segments(segments_per_chunk, settings["window_seconds"])
+
+    await report_progress(f"후보 클립 {len(segments)}개를 자르는 중", False)
+    await asyncio.to_thread(cut_clips, video_path, segments, output_dir)
+
+    await report_progress("완료", True)
+    return segments
