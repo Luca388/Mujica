@@ -28,7 +28,9 @@ class FoundSegment:
 
 
 def run_command(arguments):
-    finished = subprocess.run(arguments, capture_output=True, text=True, check=True)
+    finished = subprocess.run(arguments, capture_output=True, text=True)
+    if finished.returncode != 0:
+        raise RuntimeError(f"{arguments[0]} 실패 (종료 코드 {finished.returncode}):\n{finished.stderr.strip()}")
     return finished.stdout
 
 
