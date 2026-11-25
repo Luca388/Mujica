@@ -12,6 +12,7 @@ import gradio as gr
 
 from common import format_timestamp
 from main import find_moments
+from options import DEFAULT_OPTIONS, OPTIONS_PATH, load_options, save_options
 
 
 OUTPUTS_DIR = Path(__file__).parent / "outputs"
@@ -19,19 +20,23 @@ OUTPUTS_DIR.mkdir(exist_ok=True)
 
 PROGRESS_REFRESH_SECONDS = 0.5
 
-INITIAL_OPTIONS = {
-    "ollama_url": "http://localhost:11434",
-    "agent_model": "qwen3:8b",
-    "vision_model": "qwen2.5vl:7b",
-    "chunk_count": 4,
-    "window_seconds": 10.0,
-    "frames_per_look": 8,
-    "whisper_server_url": "http://localhost:8000",
-    "whisper_model": "Systran/faster-whisper-small",
-    "language": "ko",
-}
-
 LANGUAGE_CHOICES = ["ko", "ja", "en", "zh"]
+
+
+def collect_settings(option_values):
+    """옵션 칸에서 받은 값들(칸 순서대로)을 main.py 가 쓰는 settings 로 정리한다."""
+    raw = dict(zip(DEFAULT_OPTIONS, option_values))
+    return {
+        "ollama_url": raw["ollama_url"].strip(),
+        "agent_model": raw["agent_model"].strip(),
+        "vision_model": raw["vision_model"].strip(),
+        "chunk_count": int(raw["chunk_count"]),
+        "window_seconds": float(raw["window_seconds"]),
+        "frames_per_look": int(raw["frames_per_look"]),
+        "whisper_server_url": raw["whisper_server_url"].strip(),
+        "whisper_model": raw["whisper_model"].strip(),
+        "language": raw["language"].strip(),
+    }
 
 
 def find_problem(video_path, request_text, settings):
@@ -74,25 +79,10 @@ def show_candidates(request_text, segments):
     return gallery_items, "\n".join(report_lines)
 
 
-async def find_candidates(
-    video_path, request_text,
-    ollama_url, agent_model, vision_model,
-    agent_count, window_seconds, frames_per_look,
-    whisper_server_url, whisper_model, language,
-):
+async def find_candidates(video_path, request_text, *option_values):
     """'후보 찾기' 버튼. (진행 상황, 후보 갤러리, 후보 설명) 을 계속 내보낸다."""
     request_text = request_text.strip()
-    settings = {
-        "ollama_url": ollama_url.strip(),
-        "agent_model": agent_model.strip(),
-        "vision_model": vision_model.strip(),
-        "chunk_count": int(agent_count),
-        "window_seconds": float(window_seconds),
-        "frames_per_look": int(frames_per_look),
-        "whisper_server_url": whisper_server_url.strip(),
-        "whisper_model": whisper_model.strip(),
-        "language": language.strip(),
-    }
+    settings = collect_settings(option_values)
 
     problem = find_problem(video_path, request_text, settings)
     if problem is not None:
@@ -120,18 +110,30 @@ async def find_candidates(
     yield f"완료: 후보 {len(segments)}개", gallery_items, report
 
 
+def save_settings(*option_values):
+    """'설정 저장' 버튼."""
+    save_options(collect_settings(option_values))
+    return f"저장했습니다: {OPTIONS_PATH.name}"
+
+
+def fill_saved_options():
+    """페이지를 열 때마다 저장된 옵션을 다시 읽어 칸에 채운다."""
+    return list(load_options().values())
+
+
 def build_options_panel():
-    """옵션 칸들을 find_candidates 인자 순서대로 돌려준다."""
+    """옵션 칸들을 DEFAULT_OPTIONS 순서대로 돌려준다."""
+    initial = load_options()
     with gr.Accordion("옵션", open=False):
         gr.Markdown("**에이전트**")
-        ollama_url = gr.Textbox(label="Ollama 서버 주소", value=INITIAL_OPTIONS["ollama_url"])
+        ollama_url = gr.Textbox(label="Ollama 서버 주소", value=initial["ollama_url"])
         with gr.Row():
-            agent_model = gr.Textbox(label="에이전트 모델 (도구 호출 지원)", value=INITIAL_OPTIONS["agent_model"])
-            vision_model = gr.Textbox(label="비전 모델 (이미지 입력 지원)", value=INITIAL_OPTIONS["vision_model"])
+            agent_model = gr.Textbox(label="에이전트 모델 (도구 호출 지원)", value=initial["agent_model"])
+            vision_model = gr.Textbox(label="비전 모델 (이미지 입력 지원)", value=initial["vision_model"])
         agent_count = gr.Slider(
             label="에이전트 수 (= 영상을 나눌 조각 수)",
             minimum=1, maximum=16, step=1,
-            value=INITIAL_OPTIONS["chunk_count"],
+            value=initial["chunk_count"],
         )
 
         gr.Markdown("**프레임**")
@@ -139,34 +141,41 @@ def build_options_panel():
             window_seconds = gr.Number(
                 label="프레임 간격(초): 대표 프레임 한 장이 맡는 시간",
                 minimum=1,
-                value=INITIAL_OPTIONS["window_seconds"],
+                value=initial["window_seconds"],
             )
             frames_per_look = gr.Slider(
                 label="에이전트가 한 번에 볼 수 있는 프레임 수",
                 minimum=1, maximum=16, step=1,
-                value=INITIAL_OPTIONS["frames_per_look"],
+                value=initial["frames_per_look"],
             )
 
         gr.Markdown("**받아쓰기**")
         whisper_server_url = gr.Textbox(
             label="Whisper 서버 주소 (OpenAI 호환)",
-            value=INITIAL_OPTIONS["whisper_server_url"],
+            value=initial["whisper_server_url"],
         )
         with gr.Row():
-            whisper_model = gr.Textbox(label="Whisper 모델", value=INITIAL_OPTIONS["whisper_model"])
+            whisper_model = gr.Textbox(label="Whisper 모델", value=initial["whisper_model"])
             # Whisper 언어 코드는 ISO 639-1 이라 일본어는 jp 가 아니라 ja 다.
             language = gr.Dropdown(
                 label="언어 코드",
                 choices=LANGUAGE_CHOICES,
                 allow_custom_value=True,
-                value=INITIAL_OPTIONS["language"],
+                value=initial["language"],
             )
 
-    return [
-        ollama_url, agent_model, vision_model,
-        agent_count, window_seconds, frames_per_look,
-        whisper_server_url, whisper_model, language,
-    ]
+        option_inputs = [
+            ollama_url, agent_model, vision_model,
+            agent_count, window_seconds, frames_per_look,
+            whisper_server_url, whisper_model, language,
+        ]
+
+        with gr.Row():
+            save_button = gr.Button("설정 저장", size="sm")
+            save_status = gr.Markdown()
+        save_button.click(fn=save_settings, inputs=option_inputs, outputs=save_status)
+
+    return option_inputs
 
 
 def build_app():
@@ -198,6 +207,7 @@ def build_app():
             inputs=[video_input, request_input, *option_inputs],
             outputs=[progress_text, candidate_gallery, candidate_report],
         )
+        app.load(fn=fill_saved_options, outputs=option_inputs)
 
     return app
 
