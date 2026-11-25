@@ -18,13 +18,13 @@ report_progress(문장, 끝났는지) 는 진행 상황을 받는 비동기 함�
 import asyncio
 import tempfile
 
-from step1_probe_video import probe_video
-from step2_split_timeline import split_timeline
-from step3_extract_frames import extract_frames
-from step4_transcribe_audio import WhisperServer, transcribe_windows
-from step5_chunk_agent import create_ollama_model, run_chunk_agent
-from step6_merge_results import merge_segments
-from step7_cut_clips import cut_clips
+from step.step1_probe_video import probe_video
+from step.step2_split_timeline import split_timeline
+from step.step3_extract_frames import extract_frames
+from step.step4_transcribe_audio import WhisperServer, transcribe_windows
+from step.step5_chunk_agent import create_ollama_model, run_chunk_agent
+from step.step6_merge_results import merge_segments
+from step.step7_cut_clips import cut_clips
 
 
 async def find_moments(user_request, video_path, settings, output_dir, report_progress):
