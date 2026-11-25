@@ -24,7 +24,8 @@ class WhisperServer:
                 data={"model": self.model_name, "language": self.language, "response_format": "json"},
                 timeout=SERVER_TIMEOUT_SECONDS,
             )
-        response.raise_for_status()
+        if response.status_code != 200:
+            raise RuntimeError(f"받아쓰기 서버 오류 ({response.status_code}): {response.text[:500]}")
         return response.json()["text"].strip()
 
 

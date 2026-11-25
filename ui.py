@@ -31,6 +31,8 @@ INITIAL_OPTIONS = {
     "language": "ko",
 }
 
+LANGUAGE_CHOICES = ["ko", "ja", "en", "zh"]
+
 
 def find_problem(video_path, request_text, settings):
     if video_path is None:
@@ -152,7 +154,13 @@ def build_options_panel():
         )
         with gr.Row():
             whisper_model = gr.Textbox(label="Whisper 모델", value=INITIAL_OPTIONS["whisper_model"])
-            language = gr.Textbox(label="언어 코드", value=INITIAL_OPTIONS["language"])
+            # Whisper 언어 코드는 ISO 639-1 이라 일본어는 jp 가 아니라 ja 다.
+            language = gr.Dropdown(
+                label="언어 코드",
+                choices=LANGUAGE_CHOICES,
+                allow_custom_value=True,
+                value=INITIAL_OPTIONS["language"],
+            )
 
     return [
         ollama_url, agent_model, vision_model,
