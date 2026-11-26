@@ -18,6 +18,7 @@ DEFAULT_OPTIONS = {
     "whisper_model": "Systran/faster-whisper-small",
     "language": "ko",
     "detect_songs": True,
+    "verify_segments": True,
 }
 
 

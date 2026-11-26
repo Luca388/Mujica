@@ -37,6 +37,7 @@ def collect_settings(option_values):
         "whisper_model": raw["whisper_model"].strip(),
         "language": raw["language"].strip(),
         "detect_songs": bool(raw["detect_songs"]),
+        "verify_segments": bool(raw["verify_segments"]),
     }
 
 
@@ -173,11 +174,16 @@ def build_options_panel():
             value=initial["detect_songs"],
         )
 
+        verify_segments = gr.Checkbox(
+            label="후보 다시 확인 (찾은 후보를 하나씩 검증해 요청과 맞지 않는 것을 뺌)",
+            value=initial["verify_segments"],
+        )
+
         option_inputs = [
             ollama_url, agent_model, vision_model,
             agent_count, window_seconds, frames_per_look,
             whisper_server_url, whisper_model, language,
-            detect_songs,
+            detect_songs, verify_segments,
         ]
 
         with gr.Row():

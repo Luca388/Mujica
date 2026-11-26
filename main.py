@@ -12,6 +12,7 @@ settings
     whisper_model       받아쓰기 서버의 모델 이름
     language            받아쓰기 언어 코드
     detect_songs        노래·음악 구간을 찾아 받아쓰기에서 빼고 윈도우에 표시할지 (addon.song_detect)
+    verify_segments     찾은 후보를 하나씩 다시 확인해 요청과 맞지 않는 것을 뺄지 (step/verify_segments.py)
 
 고유명사 사전은 glossary.json 에서 읽어 에이전트 프롬프트에 넣는다 (addon/glossary.py 참고). 없으면 쓰지 않는다.
 
@@ -31,6 +32,7 @@ from step.step3_extract_frames import extract_frames
 from step.step5_chunk_agent import create_model, run_chunk_agent
 from step.step6_merge_results import merge_segments
 from step.step7_cut_clips import cut_clips
+from step.verify_segments import verify_segments
 
 
 GLOSSARY_PATH = Path(__file__).parent / "glossary.json"
@@ -82,8 +84,16 @@ async def find_moments(user_request, video_path, settings, output_dir, report_pr
 
         await report_progress(f"서브에이전트 {chunk_count}명이 구간을 찾는 중", False)
         segments_per_chunk = await asyncio.gather(*agent_tasks)
+        segments = merge_segments(segments_per_chunk, settings["window_seconds"])
 
-    segments = merge_segments(segments_per_chunk, settings["window_seconds"])
+        # 프레임 파일이 임시 폴더에 있어서, 폴더가 지워지기 전에 검증한다
+        if settings["verify_segments"] and len(segments) > 0:
+            await report_progress(f"후보 {len(segments)}개를 하나씩 다시 확인하는 중", False)
+            segments, rejected = await verify_segments(
+                vision_model, segments, chunks, user_request, settings["frames_per_look"],
+            )
+            if len(rejected) > 0:
+                await report_progress(f"요청과 맞지 않는 후보 {len(rejected)}개를 뺌", False)
 
     await report_progress(f"후보 클립 {len(segments)}개를 자르는 중", False)
     await asyncio.to_thread(cut_clips, video_path, segments, output_dir)

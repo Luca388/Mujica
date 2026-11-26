@@ -60,6 +60,19 @@ def create_model(model_name, ollama_url):
     return ChatOllama(model=model_name, base_url=ollama_url, num_ctx=OLLAMA_CONTEXT_LENGTH)
 
 
+async def ask_model(model, prompt, jpeg_images_base64=()):
+    """에이전트 루프 없이 질문 하나(와 이미지들)를 보내고 글로 된 답을 돌려받는다."""
+    if isinstance(model, ClaudeModel):
+        return await model.ask_with_images(prompt, list(jpeg_images_base64))
+
+    content = [{"type": "text", "text": prompt}]
+    for encoded in jpeg_images_base64:
+        content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded}"}})
+
+    response = await model.ainvoke([HumanMessage(content=content)])
+    return response.content
+
+
 def build_briefing(chunk, chunk_count, user_request, frames_per_look, glossary_text=""):
     lines = [
         f"사용자 요청: {user_request}",
@@ -108,16 +121,7 @@ async def ask_vision_model(vision_model, windows, question):
 
     prompt = "\n".join(instruction)
     images = [base64.b64encode(Path(window.frame_path).read_bytes()).decode("ascii") for window in windows]
-
-    if isinstance(vision_model, ClaudeModel):
-        return await vision_model.ask_with_images(prompt, images)
-
-    content = [{"type": "text", "text": prompt}]
-    for encoded in images:
-        content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded}"}})
-
-    response = await vision_model.ainvoke([HumanMessage(content=content)])
-    return response.content
+    return await ask_model(vision_model, prompt, images)
 
 
 def make_tool_functions(chunk, found_segments, vision_model, frames_per_look):
